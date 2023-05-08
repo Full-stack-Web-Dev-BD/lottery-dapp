@@ -1,40 +1,42 @@
 // SPDX-License-Identifier: MIT
+// 100, 5, ["Item A", "Item B", "Item C"], ["Description A", "Description B", "Description C"], 604800, 50, 10
 
 pragma solidity ^0.8.0;
 
 contract Lottery {
     address public admin;
-    uint public ticketPrice;
-    uint public startTime;
-    uint public endTime;
+    uint256 public ticketPrice;
+    uint256 public startTime;
+    uint256 public endTime;
     string[] public raffleItems;
     string[] public raffleDescriptions;
-    uint public purchasePeriod;
-    uint public minimumParticipants;
-    uint public maxTicketsPerUser;
-    mapping(address => uint) public balance;
-    mapping(address => uint) public ticketsPurchased;
-    uint public totalRaised;
-    uint public totalParticipants;
+    uint256 public purchasePeriod;
+    uint256 public minimumParticipants;
+    uint256 public maxTicketsPerUser;
+    mapping(address => uint256) public balance;
+    mapping(address => uint256) public ticketsPurchased;
+    uint256 public totalRaised;
+    uint256 public totalParticipants;
     bool public isTerminated;
     address public winner;
 
-    event TicketsPurchased(address indexed user, uint tickets);
-    event LotteryTerminated(uint totalRaised, address winner);
+    event TicketsPurchased(address indexed user, uint256 tickets);
+    event LotteryTerminated(uint256 totalRaised, address winner);
+    event FundsWithdrawn(address indexed user, uint256 amount);
 
     constructor(
-        uint _ticketPrice,
-        uint _endTime,
+        uint256 _ticketPrice,
+        uint256 _endTime,
         string[] memory _raffleItems,
         string[] memory _raffleDescriptions,
-        uint _purchasePeriod,
-        uint _minimumParticipants,
-        uint _maxTicketsPerUser
+        uint256 _purchasePeriod,
+        uint256 _minimumParticipants,
+        uint256 _maxTicketsPerUser
     ) {
         admin = msg.sender;
         ticketPrice = _ticketPrice;
         startTime = block.timestamp;
-        endTime = block.timestamp + (_endTime * 1 hours);
+        endTime = block.timestamp + (_endTime * 1 minutes);
         raffleItems = _raffleItems;
         raffleDescriptions = _raffleDescriptions;
         purchasePeriod = _purchasePeriod;
@@ -60,9 +62,12 @@ contract Lottery {
         _;
     }
 
-    function purchaseTickets(
-        uint tickets
-    ) external payable duringPurchasePeriod lotteryNotTerminated {
+    function purchaseTickets(uint256 tickets)
+        external
+        payable
+        duringPurchasePeriod
+        lotteryNotTerminated
+    {
         require(tickets > 0, "Tickets must be greater than zero");
         require(msg.value == ticketPrice * tickets, "Invalid amount sent(+,-)");
         require(
@@ -78,8 +83,18 @@ contract Lottery {
         emit TicketsPurchased(msg.sender, tickets);
     }
 
-    function withdrawFunds() external onlyAdmin {
-        payable(admin).transfer(address(this).balance);
+    function withdrawFunds() external onlyAdmin duringPurchasePeriod {
+        uint256 purchaseAmount = balance[msg.sender];
+        require(purchaseAmount > 0, "No funds to withdraw");
+
+        balance[msg.sender] = 0;
+        ticketsPurchased[msg.sender] = 0;
+        totalParticipants -= 1;
+        totalRaised -= purchaseAmount;
+
+        payable(msg.sender).transfer(purchaseAmount);
+
+        emit FundsWithdrawn(msg.sender, purchaseAmount);
     }
 
     function terminateLottery() external onlyAdmin {
@@ -93,19 +108,19 @@ contract Lottery {
         );
 
         isTerminated = true;
-        uint randomIndex = uint(
+        uint256 randomIndex = uint256(
             keccak256(
                 abi.encodePacked(
                     block.timestamp,
-                    block.prevrandao,
+                    block.timestamp,
                     totalParticipants
                 )
             )
         ) % totalParticipants;
-        uint count = 0;
+        uint256 count = 0;
         address winnerAddress;
-        for (uint i = 0; i < raffleItems.length; i++) {
-            for (uint j = 0; j < ticketsPurchased[msg.sender]; j++) {
+        for (uint256 i = 0; i < raffleItems.length; i++) {
+            for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
                 if (count == randomIndex) {
                     winnerAddress = msg.sender;
                     break;
@@ -126,9 +141,9 @@ contract Lottery {
         returns (address[] memory)
     {
         address[] memory participants = new address[](totalParticipants);
-        uint index = 0;
-        for (uint i = 0; i < raffleItems.length; i++) {
-            for (uint j = 0; j < ticketsPurchased[msg.sender]; j++) {
+        uint256 index = 0;
+        for (uint256 i = 0; i < raffleItems.length; i++) {
+            for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
                 participants[index] = msg.sender;
                 index++;
             }
@@ -136,19 +151,19 @@ contract Lottery {
         return participants;
     }
 
-    function viewUserTickets() external view returns (uint) {
+    function viewUserTickets() external view returns (uint256) {
         return ticketsPurchased[msg.sender];
     }
 
-    function viewUserBalance() external view returns (uint) {
+    function viewUserBalance() external view returns (uint256) {
         return balance[msg.sender];
     }
 
-    function viewTotalRaised() external view returns (uint) {
+    function viewTotalRaised() external view returns (uint256) {
         return totalRaised;
     }
 
-    function viewTotalParticipants() external view returns (uint) {
+    function viewTotalParticipants() external view returns (uint256) {
         return totalParticipants;
     }
 
@@ -160,14 +175,24 @@ contract Lottery {
         return raffleDescriptions;
     }
 
-    function viewPurchasePeriod() external view returns (uint) {
+    function viewPurchasePeriod() external view returns (uint256) {
         return purchasePeriod;
     }
 
     function viewLotteryDetails()
         external
         view
-        returns (uint, uint, uint, uint, uint, uint, uint, bool, address)
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            bool,
+            address
+        )
     {
         return (
             ticketPrice,
