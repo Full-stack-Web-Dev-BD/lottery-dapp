@@ -1,5 +1,5 @@
 {
-  "name": "hardhat-project",
+  "name": "lottery-project",
   "dependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^1.0.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.0",

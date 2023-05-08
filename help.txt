@@ -1,0 +1,74 @@
+
+this is  outout in remix:
+
+tuple(tuple(uint256,uint256,uint256,string,string,uint256,uint256,uint256,uint256,bool,address),uint256,uint256,uint256[]): 100,1683541489,1683541729,My Raffle,Description of my raffle,10,5,400,1,false,0x0000000000000000000000000000000000000000,400,4,12641354597767665634590685636948203635584795963220368909696486568947050362764,61723151308899454596647775079105063969986853011852032808046019705563853745776,77053998938090853491954834629056094575675334476677182039203469675175158109481,102567555301903587427643895089918850630428820251534839492167187009667166422467
+
+
+can you normalize it 
+
+The data returned from this function is a tuple of tuples, which is an array of tuples. You can normalize this data by looping through the array of tuples and extracting the data from each tuple. For example, in JavaScript you could do the following:
+
+let normalizedData = {
+    raffle: {},
+    balance: 0,
+    ticketsPurchased: 0,
+    tickets: []
+};
+
+let data = viewLotteryDetails(1);
+
+for (let i = 0; i < data.length; i++) {
+    let tuple = data[i];
+    switch (i) {
+        case 0:
+            normalizedData.raffle = {
+                ticketPrice: tuple[0],
+                startTime: tuple[1], 
+                endTime: tuple[2], 
+                raffleTitle: tuple[3],
+                raffleDescriptions: tuple[4],
+                minimumParticipants: tuple[5],
+                maxTicketsPerUser: tuple[6],
+                totalRaised: tuple[7],
+                totalParticipants: tuple[8],
+                isTerminated: tuple[9],
+                winner: tuple[10]
+            };
+            break;
+        case 1:
+            normalizedData.balance = tuple[0];
+            break;
+        case 2:
+            normalizedData.ticketsPurchased = tuple[0];
+            break;
+        case 3:
+            normalizedData.tickets = tuple;
+            break;
+    }
+}
+
+console.log(normalizedData);
+// Output:
+// {
+//     raffle: {
+//         ticketPrice: 100, 
+//         startTime: 4,
+//         endTime: "My Raffle",
+//         raffleTitle: "Description of my raffle",
+//         raffleDescriptions: 10,
+//         minimumParticipants: 5,
+//         maxTicketsPerUser: 0,
+//         totalRaised: 0,
+//         totalParticipants: 0,
+//         isTerminated: false,
+//         winner: null
+//     },
+//     balance: 400,
+//     ticketsPurchased: 4,
+//     tickets: [
+//         12641354597767665634590685636948203635584795963220368909696486568947050362764,
+//         61723151308899454596647775079105063969986853011852032808046019705563853745776,
+//         77053998938090853491954834629056094575675334476677182039203469675175158109481,
+//         102567555301903587427643895089918850630428820251534839492167187009667166422467
+//     ]
+// }

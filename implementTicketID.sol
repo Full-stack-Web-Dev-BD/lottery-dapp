@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-// 100, 5, ["Item A", "Item B", "Item C"], ["Description A", "Description B", "Description C"], 604800, 50, 10
 
 pragma solidity ^0.8.0;
 
@@ -15,6 +13,7 @@ contract Lottery {
     uint256 public maxTicketsPerUser;
     mapping(address => uint256) public balance;
     mapping(address => uint256) public ticketsPurchased;
+    mapping(address => uint256[]) public tickets;
     uint256 public totalRaised;
     uint256 public totalParticipants;
     bool public isTerminated;
@@ -23,6 +22,7 @@ contract Lottery {
     event TicketsPurchased(address indexed user, uint256 tickets);
     event LotteryTerminated(uint256 totalRaised, address winner);
     event FundsWithdrawn(address indexed user, uint256 amount);
+    event WinnerSelected(address winner, uint256 ticketID);
 
     constructor(
         uint256 _ticketPrice,
@@ -74,11 +74,15 @@ contract Lottery {
             ticketsPurchased[msg.sender] + tickets <= maxTicketsPerUser,
             "Maximum tickets per user exceeded"
         );
-
+        
         balance[msg.sender] += msg.value;
         ticketsPurchased[msg.sender] += tickets;
         totalRaised += msg.value;
         totalParticipants += 1;
+
+        for (uint256 i = 0; i < tickets; i++) {
+            tickets[msg.sender].push(uint256(keccak256(abi.encodePacked(msg.sender, i))));
+        }
 
         emit TicketsPurchased(msg.sender, tickets);
     }
@@ -95,10 +99,12 @@ contract Lottery {
         ) % totalParticipants;
         uint256 count = 0;
         address winnerAddress;
+        uint256 ticketID;
         for (uint256 i = 0; i < raffleItems.length; i++) {
             for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
                 if (count == randomIndex) {
                     winnerAddress = msg.sender;
+                    ticketID = tickets[msg.sender][j];
                     break;
                 }
                 count++;
@@ -106,6 +112,8 @@ contract Lottery {
         }
 
         winner = winnerAddress;
+
+        emit WinnerSelected(winnerAddress, ticketID);
     }
 
     function withdrawFunds() external onlyAdmin duringPurchasePeriod {
@@ -114,6 +122,7 @@ contract Lottery {
 
         balance[msg.sender] = 0;
         ticketsPurchased[msg.sender] = 0;
+        tickets[msg.sender] = 0;
         totalParticipants -= 1;
         totalRaised -= purchaseAmount;
 
@@ -144,10 +153,12 @@ contract Lottery {
         ) % totalParticipants;
         uint256 count = 0;
         address winnerAddress;
+        uint256 ticketID;
         for (uint256 i = 0; i < raffleItems.length; i++) {
             for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
                 if (count == randomIndex) {
                     winnerAddress = msg.sender;
+                    ticketID = tickets[msg.sender][j];
                     break;
                 }
                 count++;
@@ -176,8 +187,8 @@ contract Lottery {
         return participants;
     }
 
-    function viewUserTickets() external view returns (uint256) {
-        return ticketsPurchased[msg.sender];
+    function viewUserTickets() external view returns (uint256[]) {
+        return tickets[msg.sender];
     }
 
     function viewUserBalance() external view returns (uint256) {
