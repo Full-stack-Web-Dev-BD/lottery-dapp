@@ -1,47 +1,143 @@
-// SPDX-License-Identifier: MIT
-// 100, 5, ["Item A", "Item B", "Item C"], ["Description A", "Description B", "Description C"], 604800, 50, 10
-
+// SPDX-License-Identifier:MIT
 pragma solidity ^0.8.0;
 
+// 100,4, "My Raffle", "Description of my raffle", 10, 5
 contract Lottery {
     address public admin;
-    uint256 public ticketPrice;
-    uint256 public startTime;
-    uint256 public endTime;
-    string[] public raffleItems;
-    string[] public raffleDescriptions;
-    uint256 public purchasePeriod;
-    uint256 public minimumParticipants;
-    uint256 public maxTicketsPerUser;
-    mapping(address => uint256) public balance;
-    mapping(address => uint256) public ticketsPurchased;
-    uint256 public totalRaised;
-    uint256 public totalParticipants;
-    bool public isTerminated;
-    address public winner;
+    uint256 public raffleCount = 0;
+    mapping(uint256 => Raffle) public getRaffleByID;
+    mapping(address => uint256[]) public getParticipantRaffles;
+
+    // Raffle Data
+    mapping(uint256 => mapping(address => uint256)) balance; //how much total amount  invested in a  raffle
+    mapping(uint256 => mapping(address => uint256)) ticketsPurchased; // how much ticket a user bought ( total )
+    mapping(uint256 => mapping(address => uint256[])) tickets; //show all ticketsID undera  user he bought
+    mapping(uint256 => address[]) public raffleParticipants; //list of  perticipants for asingle raffle
+    mapping(uint256 => uint256[]) public raffleTicketIDs; // list of solded Ticket  IDs  for s single raffle
+
+    struct Raffle {
+        uint256 ticketPrice;
+        uint256 startTime;
+        uint256 endTime;
+        string raffleTitle;
+        string raffleDescriptions;
+        uint256 minimumParticipants;
+        uint256 maxTicketsPerUser;
+        uint256 totalRaised;
+        bool isTerminated;
+        address winner;
+    }
 
     event TicketsPurchased(address indexed user, uint256 tickets);
     event LotteryTerminated(uint256 totalRaised, address winner);
-    event FundsWithdrawn(address indexed user, uint256 amount);
 
-    constructor(
+    constructor() {
+        admin = msg.sender;
+    }
+
+    modifier isTicketExistOnUser(uint256 _raffleID, uint256 _ticketID) {
+        uint256[] memory usertickets = tickets[_raffleID][msg.sender];
+        for (uint256 i = 0; i < usertickets.length; i++) {
+            if (usertickets[i] == _ticketID) {
+                _;
+                return;
+            }
+        }
+        revert();
+    }
+    modifier raffleExists(uint256 raffleID) {
+        require(
+            getRaffleByID[raffleID].ticketPrice > 0,
+            "Raffle does not exist"
+        );
+        _;
+    }
+
+    function addRaffleParticipant(uint256 _number, address _address) private {
+        bool exists = false;
+        for (uint256 i = 0; i < raffleParticipants[_number].length; i++) {
+            if (raffleParticipants[_number][i] == _address) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            raffleParticipants[_number].push(_address);
+        }
+    }
+
+    function getRaffleParticipants(uint256 _raffleID)
+        public
+        view
+        returns (address[] memory)
+    {
+        return raffleParticipants[_raffleID];
+    }
+
+    function getRaffleTicketIDs(uint256 _raffleID)
+        public
+        view
+        returns (uint256[] memory)
+    {
+        return raffleTicketIDs[_raffleID];
+    }
+
+    function createRaffle(
         uint256 _ticketPrice,
         uint256 _endTime,
-        string[] memory _raffleItems,
-        string[] memory _raffleDescriptions,
-        uint256 _purchasePeriod,
+        string memory _raffleTitle,
+        string memory _raffleDescriptions,
         uint256 _minimumParticipants,
         uint256 _maxTicketsPerUser
-    ) {
-        admin = msg.sender;
-        ticketPrice = _ticketPrice;
-        startTime = block.timestamp;
-        endTime = block.timestamp + (_endTime * 1 minutes);
-        raffleItems = _raffleItems;
-        raffleDescriptions = _raffleDescriptions;
-        purchasePeriod = _purchasePeriod;
-        minimumParticipants = _minimumParticipants;
-        maxTicketsPerUser = _maxTicketsPerUser;
+    ) public {
+        require(msg.sender == admin, "Only the admin can create raffles");
+        require(_ticketPrice > 0, "Ticket price must be greater than 0");
+        require(
+            _endTime > 3,
+            "Please allow at least 3 minute to perticipate on raffle"
+        );
+        require(
+            _minimumParticipants > 0,
+            "Minimum participants must be greater than 0"
+        );
+        require(
+            _maxTicketsPerUser > 0,
+            "Max tickets per user must be greater than 0"
+        );
+        uint256 _totalRaised = 0;
+        uint256 _startTime = block.timestamp;
+        bool _isTerminated = false;
+        address _winner = address(0);
+        Raffle memory newRaffle = Raffle(
+            _ticketPrice,
+            _startTime,
+            _endTime = block.timestamp + (_endTime * 1 minutes),
+            _raffleTitle,
+            _raffleDescriptions,
+            _minimumParticipants,
+            _maxTicketsPerUser,
+            _totalRaised,
+            _isTerminated,
+            _winner
+        );
+        getRaffleByID[raffleCount] = newRaffle;
+        raffleCount++;
+    }
+
+    function timeRemaining(uint256 _raffleID)
+        public
+        view
+        raffleExists(_raffleID)
+        returns (uint256)
+    {
+        uint256 currentTime = block.timestamp;
+        uint256 endTime = getRaffleByID[_raffleID].endTime;
+
+        if (currentTime > endTime) {
+            return 0;
+        } else {
+            return (endTime - currentTime);
+        }
     }
 
     modifier onlyAdmin() {
@@ -49,7 +145,10 @@ contract Lottery {
         _;
     }
 
-    modifier duringPurchasePeriod() {
+    modifier duringPurchasePeriod(uint256 _raffleID) {
+        uint256 startTime = getRaffleByID[_raffleID].startTime;
+        uint256 endTime = getRaffleByID[_raffleID].endTime;
+
         require(
             block.timestamp >= startTime && block.timestamp <= endTime,
             "Ticket purchase period has ended"
@@ -57,178 +156,139 @@ contract Lottery {
         _;
     }
 
-    modifier lotteryNotTerminated() {
+    modifier lotteryNotTerminated(uint256 _raffleID) {
+        bool isTerminated = getRaffleByID[_raffleID].isTerminated;
         require(!isTerminated, "Lottery has been terminated");
         _;
     }
 
-    function purchaseTickets(uint256 tickets)
+    function purchaseTickets(uint256 _raffleID, uint256 ticketAmount)
         external
         payable
-        duringPurchasePeriod
-        lotteryNotTerminated
+        raffleExists(_raffleID)
+        duringPurchasePeriod(_raffleID)
+        lotteryNotTerminated(_raffleID)
     {
-        require(tickets > 0, "Tickets must be greater than zero");
-        require(msg.value == ticketPrice * tickets, "Invalid amount sent(+,-)");
+        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
+        uint256 maxTicketsPerUser = getRaffleByID[_raffleID].maxTicketsPerUser;
+
+        require(ticketAmount > 0, "Tickets must be greater than zero");
         require(
-            ticketsPurchased[msg.sender] + tickets <= maxTicketsPerUser,
-            "Maximum tickets per user exceeded"
+            msg.value == ticketPrice * ticketAmount,
+            "Invalid amount sent(+,-)"
+        );
+        require(
+            ticketsPurchased[_raffleID][msg.sender] + ticketAmount <=
+                maxTicketsPerUser,
+            "Maximum ticketAmount per user exceeded"
         );
 
-        balance[msg.sender] += msg.value;
-        ticketsPurchased[msg.sender] += tickets;
-        totalRaised += msg.value;
-        totalParticipants += 1;
-
-        emit TicketsPurchased(msg.sender, tickets);
-    }
-
-    function selectWinner() external onlyAdmin lotteryNotTerminated {
-        uint256 randomIndex = uint256(
-            keccak256(
-                abi.encodePacked(
-                    block.timestamp,
-                    block.timestamp,
-                    totalParticipants
-                )
-            )
-        ) % totalParticipants;
-        uint256 count = 0;
-        address winnerAddress;
-        for (uint256 i = 0; i < raffleItems.length; i++) {
-            for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
-                if (count == randomIndex) {
-                    winnerAddress = msg.sender;
-                    break;
-                }
-                count++;
-            }
+        balance[_raffleID][msg.sender] += msg.value;
+        ticketsPurchased[_raffleID][msg.sender] += ticketAmount;
+        getRaffleByID[_raffleID].totalRaised += msg.value;
+        addRaffleParticipant(_raffleID, msg.sender);
+        for (uint256 i = 0; i < ticketAmount; i++) {
+            uint256 ID = uint256(keccak256(abi.encodePacked(msg.sender, i)));
+            tickets[_raffleID][msg.sender].push(ID);
+            raffleTicketIDs[_raffleID].push(ID);
         }
 
-        winner = winnerAddress;
+        emit TicketsPurchased(msg.sender, ticketAmount);
     }
 
-    function withdrawFunds() external onlyAdmin duringPurchasePeriod {
-        uint256 purchaseAmount = balance[msg.sender];
-        require(purchaseAmount > 0, "No funds to withdraw");
-
-        balance[msg.sender] = 0;
-        ticketsPurchased[msg.sender] = 0;
-        totalParticipants -= 1;
-        totalRaised -= purchaseAmount;
-
-        payable(msg.sender).transfer(purchaseAmount);
-
-        emit FundsWithdrawn(msg.sender, purchaseAmount);
+    function viewMyTickets(uint256 _raffleID)
+        public
+        view
+        raffleExists(_raffleID)
+        returns (uint256[] memory)
+    {
+        return tickets[_raffleID][msg.sender];
     }
 
-    function terminateLottery() external onlyAdmin {
-        require(
-            block.timestamp > endTime,
-            "Lottery cannot be terminated before the end time"
-        );
-        require(
-            totalParticipants >= minimumParticipants,
-            "Lottery cannot be terminated as minimum participants not reached"
-        );
-
-        isTerminated = true;
-        uint256 randomIndex = uint256(
-            keccak256(
-                abi.encodePacked(
-                    block.timestamp,
-                    block.timestamp,
-                    totalParticipants
-                )
-            )
-        ) % totalParticipants;
-        uint256 count = 0;
-        address winnerAddress;
-        for (uint256 i = 0; i < raffleItems.length; i++) {
-            for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
-                if (count == randomIndex) {
-                    winnerAddress = msg.sender;
-                    break;
-                }
-                count++;
-            }
-        }
-
-        winner = winnerAddress;
-
-        emit LotteryTerminated(totalRaised, winnerAddress);
-    }
-
-    function viewParticipants()
+    function viewUserParticipantOnRaffle(uint256 _raffleID)
         external
         view
+        raffleExists(_raffleID)
+        returns (uint256)
+    {
+        return balance[_raffleID][msg.sender];
+    }
+
+    struct LotteryDetails {
+        Raffle raffle;
+        uint256 balance;
+        uint256 ticketsPurchased;
+        uint256[] tickets;
+    }
+
+    function viewLotteryDetails(uint256 _raffleID)
+        public
+        view
+        raffleExists(_raffleID)
+        returns (LotteryDetails memory)
+    {
+        LotteryDetails memory currentLottery;
+        currentLottery.raffle = getRaffleByID[_raffleID];
+        currentLottery.balance = balance[_raffleID][msg.sender];
+        currentLottery.ticketsPurchased = ticketsPurchased[_raffleID][
+            msg.sender
+        ];
+        currentLottery.tickets = tickets[_raffleID][msg.sender];
+        return currentLottery;
+    }
+
+    function selectWinner(uint256 _raffleID)
+        public
         onlyAdmin
-        returns (address[] memory)
+        raffleExists(_raffleID)
     {
-        address[] memory participants = new address[](totalParticipants);
-        uint256 index = 0;
-        for (uint256 i = 0; i < raffleItems.length; i++) {
-            for (uint256 j = 0; j < ticketsPurchased[msg.sender]; j++) {
-                participants[index] = msg.sender;
-                index++;
+        Raffle storage currentRaffle = getRaffleByID[_raffleID];
+        uint256[] memory allTickets = raffleTicketIDs[_raffleID];
+        require(allTickets.length > 0, "No tickets bought for this raffle");
+
+        // Select a random winner
+        uint256 winnerIndex = uint256(
+            keccak256(abi.encodePacked(block.timestamp))
+        ) % allTickets.length;
+        address winnerAddress = address(0);
+        for (uint256 i = 0; i < raffleParticipants[_raffleID].length; i++) {
+            address participant = raffleParticipants[_raffleID][i];
+            uint256[] memory participantTickets = tickets[_raffleID][
+                participant
+            ];
+            for (uint256 j = 0; j < participantTickets.length; j++) {
+                if (participantTickets[j] == allTickets[winnerIndex]) {
+                    winnerAddress = participant;
+                    break;
+                }
             }
         }
-        return participants;
+        currentRaffle.winner = winnerAddress;
+        currentRaffle.isTerminated = true;
+        emit LotteryTerminated(currentRaffle.totalRaised, winnerAddress);
     }
 
-    function viewUserTickets() external view returns (uint256) {
-        return ticketsPurchased[msg.sender];
-    }
+    uint256[] private newTicketList;
 
-    function viewUserBalance() external view returns (uint256) {
-        return balance[msg.sender];
-    }
-
-    function viewTotalRaised() external view returns (uint256) {
-        return totalRaised;
-    }
-
-    function viewTotalParticipants() external view returns (uint256) {
-        return totalParticipants;
-    }
-
-    function viewRaffleItems() external view returns (string[] memory) {
-        return raffleItems;
-    }
-
-    function viewRaffleDescriptions() external view returns (string[] memory) {
-        return raffleDescriptions;
-    }
-
-    function viewPurchasePeriod() external view returns (uint256) {
-        return purchasePeriod;
-    }
-
-    function viewLotteryDetails()
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            bool,
-            address
-        )
+    function cancelPerticipant(uint256 _raffleID, uint256 _ticketID)
+        public
+        isTicketExistOnUser(_raffleID, _ticketID)
+        raffleExists(_raffleID)
+        duringPurchasePeriod(_raffleID)
     {
-        return (
-            ticketPrice,
-            startTime,
-            endTime,
-            purchasePeriod,
-            minimumParticipants,
-            maxTicketsPerUser,
-            totalRaised,
-            isTerminated,
-            winner
-        );
+        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
+        balance[_raffleID][msg.sender] -= ticketPrice;
+        ticketsPurchased[_raffleID][msg.sender] -= 1;
+
+        uint256 j = 0;
+        for (uint256 i = 0; i < tickets[_raffleID][msg.sender].length; i++) {
+            if (tickets[_raffleID][msg.sender][i] != _ticketID) {
+                newTicketList.push(tickets[_raffleID][msg.sender][i]);
+                j++;
+            }
+        }
+        tickets[_raffleID][msg.sender] = newTicketList;
+        delete raffleTicketIDs[_raffleID][_ticketID];
+        getRaffleByID[_raffleID].ticketPrice -= ticketPrice;
     }
 }
