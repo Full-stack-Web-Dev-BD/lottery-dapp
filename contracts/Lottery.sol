@@ -1,7 +1,7 @@
 // SPDX-License-Identifier:MIT
 pragma solidity ^0.8.0;
 
-// 100,4, "My Raffle", "Description of my raffle", 10, 5
+// 100,4, "Watch", "title","Description of my raffle",  5
 contract Lottery {
     address public admin;
     uint256 public raffleCount = 0;
@@ -19,13 +19,14 @@ contract Lottery {
         uint256 ticketPrice;
         uint256 startTime;
         uint256 endTime;
+        string raffleCategory;
         string raffleTitle;
         string raffleDescriptions;
         uint256 minimumParticipants;
-        uint256 maxTicketsPerUser;
         uint256 totalRaised;
         bool isTerminated;
         address winner;
+        uint256 raffleID;
     }
 
     event TicketsPurchased(address indexed user, uint256 tickets);
@@ -85,10 +86,10 @@ contract Lottery {
     function createRaffle(
         uint256 _ticketPrice,
         uint256 _endTime,
+        string memory _raffleCategory,
         string memory _raffleTitle,
         string memory _raffleDescriptions,
-        uint256 _minimumParticipants,
-        uint256 _maxTicketsPerUser
+        uint256 _minimumParticipants
     ) public {
         require(msg.sender == admin, "Only the admin can create raffles");
         require(_ticketPrice > 0, "Ticket price must be greater than 0");
@@ -100,10 +101,6 @@ contract Lottery {
             _minimumParticipants > 0,
             "Minimum participants must be greater than 0"
         );
-        require(
-            _maxTicketsPerUser > 0,
-            "Max tickets per user must be greater than 0"
-        );
         uint256 _totalRaised = 0;
         uint256 _startTime = block.timestamp;
         bool _isTerminated = false;
@@ -112,16 +109,25 @@ contract Lottery {
             _ticketPrice,
             _startTime,
             _endTime = block.timestamp + (_endTime * 1 minutes),
+            _raffleCategory,
             _raffleTitle,
             _raffleDescriptions,
             _minimumParticipants,
-            _maxTicketsPerUser,
             _totalRaised,
             _isTerminated,
-            _winner
+            _winner,
+            raffleCount
         );
         getRaffleByID[raffleCount] = newRaffle;
         raffleCount++;
+    }
+
+    function getAllRaffles() public view returns (Raffle[] memory) {
+        Raffle[] memory raffles = new Raffle[](raffleCount);
+        for (uint256 i = 0; i < raffleCount; i++) {
+            raffles[i] = getRaffleByID[i];
+        }
+        return raffles;
     }
 
     function timeRemaining(uint256 _raffleID)
@@ -170,17 +176,11 @@ contract Lottery {
         lotteryNotTerminated(_raffleID)
     {
         uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
-        uint256 maxTicketsPerUser = getRaffleByID[_raffleID].maxTicketsPerUser;
 
         require(ticketAmount > 0, "Tickets must be greater than zero");
         require(
             msg.value == ticketPrice * ticketAmount,
             "Invalid amount sent(+,-)"
-        );
-        require(
-            ticketsPurchased[_raffleID][msg.sender] + ticketAmount <=
-                maxTicketsPerUser,
-            "Maximum ticketAmount per user exceeded"
         );
 
         balance[_raffleID][msg.sender] += msg.value;
