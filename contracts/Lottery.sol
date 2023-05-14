@@ -1,7 +1,7 @@
 // SPDX-License-Identifier:MIT
 pragma solidity ^0.8.0;
 
-// 100,4, "My Raffle", "Description of my raffle", 10, 5
+// 100,4, "Watch", "title","Description of my raffle",  5
 contract Lottery {
     address public admin;
     uint256 public raffleCount = 0;
@@ -19,10 +19,10 @@ contract Lottery {
         uint256 ticketPrice;
         uint256 startTime;
         uint256 endTime;
-        string raffleType;
+        string raffleCategory;
         string raffleTitle;
         string raffleDescriptions;
-        uint256 minimumParticipants; 
+        uint256 minimumParticipants;
         uint256 totalRaised;
         bool isTerminated;
         address winner;
@@ -85,7 +85,7 @@ contract Lottery {
     function createRaffle(
         uint256 _ticketPrice,
         uint256 _endTime,
-        string memory _raffleType,
+        string memory _raffleCategory,
         string memory _raffleTitle,
         string memory _raffleDescriptions,
         uint256 _minimumParticipants
@@ -99,7 +99,7 @@ contract Lottery {
         require(
             _minimumParticipants > 0,
             "Minimum participants must be greater than 0"
-        ); 
+        );
         uint256 _totalRaised = 0;
         uint256 _startTime = block.timestamp;
         bool _isTerminated = false;
@@ -108,7 +108,7 @@ contract Lottery {
             _ticketPrice,
             _startTime,
             _endTime = block.timestamp + (_endTime * 1 minutes),
-            _raffleType,
+            _raffleCategory,
             _raffleTitle,
             _raffleDescriptions,
             _minimumParticipants,
@@ -118,6 +118,14 @@ contract Lottery {
         );
         getRaffleByID[raffleCount] = newRaffle;
         raffleCount++;
+    }
+
+    function getAllRaffles() public view returns (Raffle[] memory) {
+        Raffle[] memory raffles = new Raffle[](raffleCount);
+        for (uint256 i = 0; i < raffleCount; i++) {
+            raffles[i] = getRaffleByID[i];
+        }
+        return raffles;
     }
 
     function timeRemaining(uint256 _raffleID)
@@ -165,13 +173,13 @@ contract Lottery {
         duringPurchasePeriod(_raffleID)
         lotteryNotTerminated(_raffleID)
     {
-        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice; 
+        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
 
         require(ticketAmount > 0, "Tickets must be greater than zero");
         require(
             msg.value == ticketPrice * ticketAmount,
             "Invalid amount sent(+,-)"
-        ); 
+        );
 
         balance[_raffleID][msg.sender] += msg.value;
         ticketsPurchased[_raffleID][msg.sender] += ticketAmount;
