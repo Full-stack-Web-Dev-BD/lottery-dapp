@@ -26,6 +26,7 @@ contract Lottery {
         uint256 totalRaised;
         bool isTerminated;
         address winner;
+        uint256 raffleID;
     }
 
     event TicketsPurchased(address indexed user, uint256 tickets);
@@ -114,7 +115,8 @@ contract Lottery {
             _minimumParticipants,
             _totalRaised,
             _isTerminated,
-            _winner
+            _winner,
+            raffleCount
         );
         getRaffleByID[raffleCount] = newRaffle;
         raffleCount++;
