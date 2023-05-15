@@ -94,10 +94,6 @@ contract Lottery {
         require(msg.sender == admin, "Only the admin can create raffles");
         require(_ticketPrice > 0, "Ticket price must be greater than 0");
         require(
-            _endTime > 3,
-            "Please allow at least 3 minute to perticipate on raffle"
-        );
-        require(
             _minimumParticipants > 0,
             "Minimum participants must be greater than 0"
         );
@@ -236,37 +232,38 @@ contract Lottery {
         currentLottery.tickets = tickets[_raffleID][msg.sender];
         return currentLottery;
     }
+ function selectWinner(uint256 _raffleID)
+    public
+    onlyAdmin
+    raffleExists(_raffleID)
+{
+    Raffle storage currentRaffle = getRaffleByID[_raffleID];
+    uint256[] memory allTickets = raffleTicketIDs[_raffleID];
+    require(allTickets.length > 0, "No tickets bought for this raffle");
 
-    function selectWinner(uint256 _raffleID)
-        public
-        onlyAdmin
-        raffleExists(_raffleID)
-    {
-        Raffle storage currentRaffle = getRaffleByID[_raffleID];
-        uint256[] memory allTickets = raffleTicketIDs[_raffleID];
-        require(allTickets.length > 0, "No tickets bought for this raffle");
+    require(
+        allTickets.length >= currentRaffle.minimumParticipants,
+        "Not enough participants for this raffle"
+    );
 
-        // Select a random winner
-        uint256 winnerIndex = uint256(
-            keccak256(abi.encodePacked(block.timestamp))
-        ) % allTickets.length;
-        address winnerAddress = address(0);
-        for (uint256 i = 0; i < raffleParticipants[_raffleID].length; i++) {
-            address participant = raffleParticipants[_raffleID][i];
-            uint256[] memory participantTickets = tickets[_raffleID][
-                participant
-            ];
-            for (uint256 j = 0; j < participantTickets.length; j++) {
-                if (participantTickets[j] == allTickets[winnerIndex]) {
-                    winnerAddress = participant;
-                    break;
-                }
+    // Select a random winner
+    uint256 winnerIndex = uint256(keccak256(abi.encodePacked(block.timestamp))) % allTickets.length;
+    address winnerAddress = address(0);
+    for (uint256 i = 0; i < raffleParticipants[_raffleID].length; i++) {
+        address participant = raffleParticipants[_raffleID][i];
+        uint256[] memory participantTickets = tickets[_raffleID][participant];
+        for (uint256 j = 0; j < participantTickets.length; j++) {
+            if (participantTickets[j] == allTickets[winnerIndex]) {
+                winnerAddress = participant;
+                break;
             }
         }
-        currentRaffle.winner = winnerAddress;
-        currentRaffle.isTerminated = true;
-        emit LotteryTerminated(currentRaffle.totalRaised, winnerAddress);
     }
+
+    currentRaffle.winner = winnerAddress;
+    currentRaffle.isTerminated = true;
+    emit LotteryTerminated(currentRaffle.totalRaised, winnerAddress);
+}
 
     uint256[] private newTicketList;
 
