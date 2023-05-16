@@ -1,7 +1,7 @@
 // SPDX-License-Identifier:MIT
 pragma solidity ^0.8.0;
 
-// 100,4, "Watch", "title","Description of my raffle",  5
+// 100,1, "Watch", "title","Description of my raffle",  5
 contract Lottery {
     address public admin;
     uint256 public raffleCount = 0;
@@ -289,25 +289,60 @@ contract Lottery {
 
     uint256[] private newTicketList;
 
-    function cancelPerticipant(uint256 _raffleID, uint256 _ticketID)
+    function cancelParticipant(uint256 _raffleID, uint256 _ticketID)
         public
         isTicketExistOnUser(_raffleID, _ticketID)
         raffleExists(_raffleID)
-        duringPurchasePeriod(_raffleID)
     {
-        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
+        Raffle storage raffle = getRaffleByID[_raffleID];
+
+        require(raffle.isTerminated == false, "Raffle Already Terminated");
+        require(
+            raffleParticipants[_raffleID].length < raffle.minimumParticipants,
+            "Minimum Participants already Met"
+        );
+
+        uint256 ticketPrice = raffle.ticketPrice;
         balance[_raffleID][msg.sender] -= ticketPrice;
         ticketsPurchased[_raffleID][msg.sender] -= 1;
 
-        uint256 j = 0;
-        for (uint256 i = 0; i < tickets[_raffleID][msg.sender].length; i++) {
-            if (tickets[_raffleID][msg.sender][i] != _ticketID) {
-                newTicketList.push(tickets[_raffleID][msg.sender][i]);
-                j++;
+        uint256[] storage userTickets = tickets[_raffleID][msg.sender];
+        uint256 ticketIndex;
+        for (uint256 i = 0; i < userTickets.length; i++) {
+            if (userTickets[i] == _ticketID) {
+                ticketIndex = i;
+                break;
             }
         }
-        tickets[_raffleID][msg.sender] = newTicketList;
-        delete raffleTicketIDs[_raffleID][_ticketID];
-        getRaffleByID[_raffleID].ticketPrice -= ticketPrice;
+
+        require(ticketIndex < userTickets.length, "Ticket not found");
+
+        // Remove the canceled ticket from user's ticket list
+        if (ticketIndex < userTickets.length - 1) {
+            // Move the last ticket to the position of the canceled ticket
+            userTickets[ticketIndex] = userTickets[userTickets.length - 1];
+        }
+        userTickets.pop();
+
+        // Remove the canceled ticket ID from raffleTicketIDs
+        uint256[] storage _raffleTicketIDs = raffleTicketIDs[_raffleID];
+        for (uint256 i = 0; i < _raffleTicketIDs.length; i++) {
+            if (_raffleTicketIDs[i] == _ticketID) {
+                ticketIndex = i;
+                break;
+            }
+        }
+
+        require(ticketIndex < _raffleTicketIDs.length, "Ticket ID not found");
+
+        // Remove the canceled ticket ID from _raffleTicketIDs
+        if (ticketIndex < _raffleTicketIDs.length - 1) {
+            // Move the last ticket ID to the position of the canceled ticket ID
+            _raffleTicketIDs[ticketIndex] = _raffleTicketIDs[
+                _raffleTicketIDs.length - 1
+            ];
+        }
+        _raffleTicketIDs.pop();
+        require(payable(msg.sender).send(ticketPrice), "Failed to send refund");
     }
 }
