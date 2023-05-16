@@ -52,23 +52,52 @@ contract Lottery {
             "Raffle does not exist"
         );
         _;
+    } 
+
+    function getContractBalance() external view onlyAdmin returns (uint256) {
+        require(
+            msg.sender == admin,
+            "Only admin can transfer contract balance to admin"
+        ); 
+        uint256 totalNonTerminatedAmount = 0;
+        // Iterate over all raffles and calculate the total amount from non-terminated raffles
+        for (uint256 i = 0; i < raffleCount; i++) {
+            Raffle storage raffle = getRaffleByID[i];
+            if (!raffle.isTerminated) {
+                totalNonTerminatedAmount += raffle.totalRaised;
+            }
+        }
+
+        uint256 contractBalance = address(this).balance;
+        uint256 withdrawableAmount = totalNonTerminatedAmount >= contractBalance
+            ? 0
+            : contractBalance - totalNonTerminatedAmount;
+        return withdrawableAmount;
     }
 
-    function getContractBalance() external view returns (uint256) {
-        require(msg.sender == admin, "Only admin can view contract balance");
-        return address(this).balance;
-    }
-
-    function transferBalanceToAdmin() external {
+    function transferBalanceToAdmin() external onlyAdmin {
         require(
             msg.sender == admin,
             "Only admin can transfer contract balance to admin"
         );
         require(address(this).balance > 0, "Contract balance is zero");
 
+        uint256 totalNonTerminatedAmount = 0;
+
+        // Iterate over all raffles and calculate the total amount from non-terminated raffles
+        for (uint256 i = 0; i < raffleCount; i++) {
+            Raffle storage raffle = getRaffleByID[i];
+            if (!raffle.isTerminated) {
+                totalNonTerminatedAmount += raffle.totalRaised;
+            }
+        }
         uint256 contractBalance = address(this).balance;
+        uint256 withdrawableAmount = totalNonTerminatedAmount >= contractBalance
+            ? 0
+            : contractBalance - totalNonTerminatedAmount;
+        require(withdrawableAmount > 0, "Not enough Amount to make a withdraw");
         address payable adminWallet = payable(admin);
-        adminWallet.transfer(contractBalance);
+        adminWallet.transfer(withdrawableAmount);
     }
 
     function addRaffleParticipant(uint256 _number, address _address) private {
