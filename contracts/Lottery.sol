@@ -53,7 +53,11 @@ contract Lottery {
         );
         _;
     } 
-
+    
+    function getContractTotalBalance() external view onlyAdmin returns (uint256) {
+        uint256 _balance =address(this).balance;
+        return _balance;
+    }
     function getContractBalance() external view onlyAdmin returns (uint256) {
         require(
             msg.sender == admin,
