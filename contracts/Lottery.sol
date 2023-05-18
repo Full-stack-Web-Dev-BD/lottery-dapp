@@ -1,7 +1,7 @@
 // SPDX-License-Identifier:MIT
 pragma solidity ^0.8.0;
 
-// 100,4, "Watch", "title","Description of my raffle",  5
+// 100,1, "Watch", "title","Description of my raffle",  5
 contract Lottery {
     address public admin;
     uint256 public raffleCount = 0;
@@ -52,23 +52,56 @@ contract Lottery {
             "Raffle does not exist"
         );
         _;
+    } 
+    
+    function getContractTotalBalance() external view onlyAdmin returns (uint256) {
+        uint256 _balance =address(this).balance;
+        return _balance;
+    }
+    function getContractBalance() external view onlyAdmin returns (uint256) {
+        require(
+            msg.sender == admin,
+            "Only admin can transfer contract balance to admin"
+        ); 
+        uint256 totalNonTerminatedAmount = 0;
+        // Iterate over all raffles and calculate the total amount from non-terminated raffles
+        for (uint256 i = 0; i < raffleCount; i++) {
+            Raffle storage raffle = getRaffleByID[i];
+            if (!raffle.isTerminated) {
+                totalNonTerminatedAmount += raffle.totalRaised;
+            }
+        }
+
+        uint256 contractBalance = address(this).balance;
+        uint256 withdrawableAmount = totalNonTerminatedAmount >= contractBalance
+            ? 0
+            : contractBalance - totalNonTerminatedAmount;
+        return withdrawableAmount;
     }
 
-    function getContractBalance() external view returns (uint256) {
-        require(msg.sender == admin, "Only admin can view contract balance");
-        return address(this).balance;
-    }
-
-    function transferBalanceToAdmin() external {
+    function transferBalanceToAdmin() external onlyAdmin {
         require(
             msg.sender == admin,
             "Only admin can transfer contract balance to admin"
         );
         require(address(this).balance > 0, "Contract balance is zero");
 
+        uint256 totalNonTerminatedAmount = 0;
+
+        // Iterate over all raffles and calculate the total amount from non-terminated raffles
+        for (uint256 i = 0; i < raffleCount; i++) {
+            Raffle storage raffle = getRaffleByID[i];
+            if (!raffle.isTerminated) {
+                totalNonTerminatedAmount += raffle.totalRaised;
+            }
+        }
         uint256 contractBalance = address(this).balance;
+        uint256 withdrawableAmount = totalNonTerminatedAmount >= contractBalance
+            ? 0
+            : contractBalance - totalNonTerminatedAmount;
+        require(withdrawableAmount > 0, "Not enough Amount to make a withdraw");
         address payable adminWallet = payable(admin);
-        adminWallet.transfer(contractBalance);
+        adminWallet.transfer(withdrawableAmount);
     }
 
     function addRaffleParticipant(uint256 _number, address _address) private {
@@ -289,25 +322,60 @@ contract Lottery {
 
     uint256[] private newTicketList;
 
-    function cancelPerticipant(uint256 _raffleID, uint256 _ticketID)
+    function cancelParticipant(uint256 _raffleID, uint256 _ticketID)
         public
         isTicketExistOnUser(_raffleID, _ticketID)
         raffleExists(_raffleID)
-        duringPurchasePeriod(_raffleID)
     {
-        uint256 ticketPrice = getRaffleByID[_raffleID].ticketPrice;
+        Raffle storage raffle = getRaffleByID[_raffleID];
+
+        require(raffle.isTerminated == false, "Raffle Already Terminated");
+        require(
+            raffleParticipants[_raffleID].length < raffle.minimumParticipants,
+            "Minimum Participants already Met"
+        );
+
+        uint256 ticketPrice = raffle.ticketPrice;
         balance[_raffleID][msg.sender] -= ticketPrice;
         ticketsPurchased[_raffleID][msg.sender] -= 1;
 
-        uint256 j = 0;
-        for (uint256 i = 0; i < tickets[_raffleID][msg.sender].length; i++) {
-            if (tickets[_raffleID][msg.sender][i] != _ticketID) {
-                newTicketList.push(tickets[_raffleID][msg.sender][i]);
-                j++;
+        uint256[] storage userTickets = tickets[_raffleID][msg.sender];
+        uint256 ticketIndex;
+        for (uint256 i = 0; i < userTickets.length; i++) {
+            if (userTickets[i] == _ticketID) {
+                ticketIndex = i;
+                break;
             }
         }
-        tickets[_raffleID][msg.sender] = newTicketList;
-        delete raffleTicketIDs[_raffleID][_ticketID];
-        getRaffleByID[_raffleID].ticketPrice -= ticketPrice;
+
+        require(ticketIndex < userTickets.length, "Ticket not found");
+
+        // Remove the canceled ticket from user's ticket list
+        if (ticketIndex < userTickets.length - 1) {
+            // Move the last ticket to the position of the canceled ticket
+            userTickets[ticketIndex] = userTickets[userTickets.length - 1];
+        }
+        userTickets.pop();
+
+        // Remove the canceled ticket ID from raffleTicketIDs
+        uint256[] storage _raffleTicketIDs = raffleTicketIDs[_raffleID];
+        for (uint256 i = 0; i < _raffleTicketIDs.length; i++) {
+            if (_raffleTicketIDs[i] == _ticketID) {
+                ticketIndex = i;
+                break;
+            }
+        }
+
+        require(ticketIndex < _raffleTicketIDs.length, "Ticket ID not found");
+
+        // Remove the canceled ticket ID from _raffleTicketIDs
+        if (ticketIndex < _raffleTicketIDs.length - 1) {
+            // Move the last ticket ID to the position of the canceled ticket ID
+            _raffleTicketIDs[ticketIndex] = _raffleTicketIDs[
+                _raffleTicketIDs.length - 1
+            ];
+        }
+        _raffleTicketIDs.pop();
+        require(payable(msg.sender).send(ticketPrice), "Failed to send refund");
     }
 }
