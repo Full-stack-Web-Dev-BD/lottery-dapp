@@ -1,7 +1,5 @@
 // SPDX-License-Identifier:MIT
-pragma solidity ^0.8.0;
-
-// 100,1, "Watch", "title","Description of my raffle",  5
+pragma solidity 0.8.0;
 contract Lottery {
     address public admin;
     uint256 public raffleCount = 0;
